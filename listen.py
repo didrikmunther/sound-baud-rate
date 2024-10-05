@@ -10,7 +10,6 @@ from alphabet import (
     freq_diff,
     pause_freq,
     alphabet_square_size,
-    snip_size,
 )
 from dataclasses import dataclass
 import itertools
@@ -42,7 +41,7 @@ top_frequencies = []
 f_max = x_freq + freq_diff * alphabet_square_size * 2 + 50
 f_min = int(pause_freq / 2 - 50)
 
-print(la, snip_size, la / snip_size)
+snip_size = 0.02
 
 for i in range(0, int(la / snip_size)):
     audio = a[i * int(s * snip_size) : (i + 1) * int(s * snip_size)]
@@ -58,10 +57,11 @@ for i in range(0, int(la / snip_size)):
     peaks, _ = find_peaks(Pxx)
     peak_heights = Pxx[peaks]
 
-    top_two = np.argsort(peak_heights)[-2:]
+    # top_two = np.argsort(peak_heights)[-2:]
+    top_three = np.argsort(peak_heights)[-3:]
     frequencies = [
         TopFrequency(float(f[peaks[index]] * 2), float(Pxx[peaks[index]]))
-        for index in top_two
+        for index in top_three
     ]
     # print(frequencies)
 

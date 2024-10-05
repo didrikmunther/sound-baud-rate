@@ -1,4 +1,4 @@
-from alphabet import freq_diff, pause_freq
+from alphabet import freq_diff, pause_freq, alphabet
 from dataclasses import dataclass
 import numpy as np
 from collections import Counter
@@ -23,16 +23,27 @@ class AlphabetCoder:
     def __init__(self, size: int):
         self.size = size
 
-        if size >= 64:
-            self.letters = [
-                x
-                for x in "? \0\n\tabcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVXYZ0123456789!.,:'"
-            ]
-        else:
-            raise NotImplementedError("Alphabet size must be greater than 64")
+        alph = [c for c in "abcdefghijklmnopqrstuvwxyz"]
+        all_alph = [c for c in "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"]
+        special = [c for c in "? \0\n\t!.,:'"]
+        alph_combinations = [f"{a}{b}" for a in alph for b in alph]
+
+        complete = [""] + special + alph + all_alph + alph_combinations
+        self.letters = [c for c in complete]
 
     def encode(self, content: str) -> list[int]:
-        return [self.letters.index(c) for c in content]
+        pairwise = [content[i : i + 2] for i in range(0, len(content), 2)]
+        result = []
+
+        for p in pairwise:
+            try:
+                result.append(self.letters.index(p))
+            except ValueError:
+                a, b = p
+                result.append(self.letters.index(a))
+                result.append(self.letters.index(b))
+
+        return result
 
     def _get_letter(self, index: int) -> str:
         try:
@@ -51,15 +62,18 @@ class Translator:
 
         def add_freq(trie, freq, child):
             if freq in trie:
-                trie[freq].update(child)
+                for k, v in child.items():
+                    add_freq(trie[freq], k, v)
             else:
                 trie[freq] = child
 
         self.trie = {}
         for i, row in enumerate(alphabet):
-            [freq1, freq2] = row
-            add_freq(self.trie, freq1, {freq2: i})
-            add_freq(self.trie, freq2, {freq1: i})
+            [freq1, freq2, freq3] = row
+
+            add_freq(self.trie, freq1, {freq2: {freq3: i}, freq3: {freq2: i}})
+            add_freq(self.trie, freq2, {freq1: {freq3: i}, freq3: {freq1: i}})
+            add_freq(self.trie, freq3, {freq1: {freq2: i}, freq2: {freq1: i}})
 
         self.buffer = []
 
@@ -91,10 +105,32 @@ class Translator:
 
                 node = node[index]
 
-            # print("Got node", node)
-
             # We didn't find a match, append 0, which is always a N/A character
             if not isinstance(node, dict) and node != -1:
                 self.buffer.append(node)
 
         return decoded
+
+
+def main():
+    freqs = [3562.5, 3000.0, 4062.5]
+
+    translator = Translator(alphabet)
+    coder = AlphabetCoder(len(alphabet))
+
+    node = translator.trie
+    for freq in freqs:
+        index = min(node.keys(), key=lambda x: abs(x - freq))
+
+        if abs(index - freq) > 1000:
+            node = -1
+            break
+
+        node = node[index]
+
+    print(node)
+    print(coder.decode([node]))
+
+
+if __name__ == "__main__":
+    main()

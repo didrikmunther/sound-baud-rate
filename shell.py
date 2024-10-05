@@ -4,7 +4,7 @@ from record import listen_until_stop
 
 
 def send(message: str):
-    play_message(message)
+    play_message(message, 2)
 
 
 def receive():

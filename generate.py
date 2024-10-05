@@ -3,8 +3,6 @@ import pyaudio
 from alphabet import (
     alphabet,
     alphabet_square_size,
-    send_duration,
-    send_pause,
     pause_freq,
 )
 from decoder import AlphabetCoder
@@ -44,8 +42,11 @@ def square_wave(i, frequency, amplitude):
         return int(-32767.0 * amplitude)
 
 
-def message_generator(content: int):
+def message_generator(content: int, baud_rate):
     generators = [generator(sine_wave, freq, 1.0) for freq in alphabet[content]]
+
+    send_pause = 0.6428571429 / baud_rate
+    send_duration = 1 * (1 - 0.6428571429) / baud_rate
 
     for i in range(0, int(send_duration * SAMPLE_FREQ)):
         yield int(sum([g(i) for g in generators]) / len(generators))
@@ -55,12 +56,12 @@ def message_generator(content: int):
         yield pause_generator(i)
 
 
-def get_audio_data(message_text: str) -> bytes:
-    message = AlphabetCoder(alphabet_square_size**2).encode(message_text)
-    message_generators = [message_generator(content) for content in message]
+def get_audio_data(message_text: str, baud_rate) -> bytes:
+    message = AlphabetCoder(alphabet_square_size**2).encode(message_text) + [0]
+    message_generators = [message_generator(content, baud_rate) for content in message]
 
     values = []
-    for generator in tqdm(message_generators):
+    for generator in message_generators:
         for value in generator:
             packed_value = struct.pack("h", value)
             values.append(packed_value)
@@ -71,7 +72,7 @@ def get_audio_data(message_text: str) -> bytes:
     return value_str
 
 
-def play_message(message_text: str):
+def play_message(message_text: str, baud_rate=10):
     channels = 2
     sample_width = 2  # 16-bit audio
     rate = 44100  # Sample rate (Hz)
@@ -84,7 +85,7 @@ def play_message(message_text: str):
         output=True,
     )
 
-    value_str = get_audio_data(message_text + "\n\n\n")
+    value_str = get_audio_data(message_text, baud_rate)
 
     try:
         data_len = len(value_str)
@@ -110,7 +111,7 @@ def main():
     noise_output = wave.open("out.wav", "w")
     noise_output.setparams((2, 2, 44100, 0, "NONE", "not compressed"))
 
-    value_str = get_audio_data(message_text + "\n\n\n")
+    value_str = get_audio_data(message_text, baud_rate=3.2)
     noise_output.writeframes(value_str)
 
     noise_output.close()

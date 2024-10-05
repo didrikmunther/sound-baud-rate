@@ -1,4 +1,5 @@
 import sys
+import time
 from matplotlib import pyplot as plt
 from pvrecorder import PvRecorder
 import numpy as np
@@ -11,7 +12,6 @@ from alphabet import (
     freq_diff,
     pause_freq,
     alphabet_square_size,
-    snip_size,
 )
 from decoder import AlphabetCoder, TopFrequency, Translator
 
@@ -26,6 +26,8 @@ f_min = int(pause_freq / 2 - 50)
 def process_audio_chunk(audio_chunk, sampling_rate):
     na = len(audio_chunk)
     top_frequencies = []
+
+    snip_size = 0.025
 
     for i in range(0, int(na / sampling_rate / snip_size * 4)):
         audio = audio_chunk[
@@ -51,7 +53,7 @@ def process_audio_chunk(audio_chunk, sampling_rate):
         peak_heights = Pxx[peaks]
 
         # Get the top two peak frequencies
-        top_two = np.argsort(peak_heights)[-2:]
+        top_two = np.argsort(peak_heights)[-3:]
         frequencies = [
             TopFrequency(float(f[peaks[index]] * 2), float(Pxx[peaks[index]]))
             for index in top_two
@@ -62,15 +64,57 @@ def process_audio_chunk(audio_chunk, sampling_rate):
     return top_frequencies
 
 
+def listen_until_timeout(duration: float):
+    start_time = time.time()
+
+    coder = AlphabetCoder(alphabet_square_size**2)
+    translator = Translator(alphabet)
+    result_full = ""
+
+    recorder = PvRecorder(device_index=-1, frame_length=512)
+    sampling_rate = recorder.sample_rate
+
+    try:
+        recorder.start()
+
+        coder = AlphabetCoder(alphabet_square_size**2)
+        translator = Translator(alphabet)
+
+        while True:
+            if time.time() - start_time > duration:
+                return
+
+            a = np.array(recorder.read())
+
+            frequencies = process_audio_chunk(a, sampling_rate)
+            translated = translator.translate(frequencies)
+            last = translated[-1] if len(translated) > 0 else None
+            if last == 0:
+                translated = translated[:-1]
+            result = coder.decode(translated)
+            result_full += result
+
+            # print(result)
+
+            if result != "":
+                yield result
+
+            if last == 0:
+                return
+
+    except KeyboardInterrupt:
+        recorder.stop()
+    finally:
+        recorder.delete()
+
+
 def listen_until_stop(line=None, fig=None):
     coder = AlphabetCoder(alphabet_square_size**2)
     translator = Translator(alphabet)
     result_full = ""
 
     recorder = PvRecorder(device_index=-1, frame_length=512)
-
-    # Parameters
-    sampling_rate = recorder.sample_rate  # standard for most microphones
+    sampling_rate = recorder.sample_rate
 
     try:
         recorder.start()
@@ -94,12 +138,16 @@ def listen_until_stop(line=None, fig=None):
                 fig.canvas.flush_events()
 
             frequencies = process_audio_chunk(a, sampling_rate)
-            result = coder.decode(translator.translate(frequencies))
+            translated = translator.translate(frequencies)
+            last = translated[-1] if len(translated) > 0 else None
+            if last == 0:
+                translated = translated[:-1]
+            result = coder.decode(translated)
             result_full += result
 
             yield result
 
-            if result_full[-3:] == "\n\n\n":
+            if last == 0:
                 return
 
     except KeyboardInterrupt:
